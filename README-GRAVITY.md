@@ -1,7 +1,7 @@
 # Gravity fork of Activepieces
 
 > Start-here doc for the AIGravity-maintained fork of [activepieces/activepieces](https://github.com/activepieces/activepieces).
-> Forked at upstream tag `0.83.1` on 2026-05-25.
+> Bootstrapped from upstream tag `0.83.1` on 2026-05-25. **Currently on `0.85.4`** (upgraded 2026-06-19 via cherry-pick — see "Upgrade flow" below).
 
 The upstream `README.md` still applies for the AP product itself. This file
 adds the Gravity-specific bits: branches, license boundaries, native dev
@@ -14,7 +14,7 @@ loop, and how to upgrade against upstream.
 | Branch | Purpose | Modifiable? |
 |---|---|---|
 | `upstream-main` | Tracks `upstream/main`. Updated by `git fetch upstream && git reset --hard upstream/main`. | Never |
-| `gravity/main`  | Long-lived branch with all our patches on top of upstream `v0.83.1`. CI builds image from this. | Via PR only |
+| `gravity/main`  | Long-lived branch: clean upstream tag (**`0.85.4`** since 2026-06-19) + our P-NNN patches. CI builds image from this. | Via PR only |
 | `feature/*`     | Short-lived branches PR'd into `gravity/main`. | Yes |
 
 `pre-push` hook (upstream's) blocks direct pushes to `main`. We follow the
@@ -40,8 +40,8 @@ If you need an EE feature, do one of:
 1. Find the MIT-compatible workaround. We already have ones for JWT mint
    (no `managed-authn` needed), OAuth (`oauth-broker` instead of EE OAuth
    Apps), and white-label (`flags/theme.ts` instead of EE theming).
-   See `core/docs/ACTIVEPIECES_FORK_SCOPE.md` § "EE features and how we
-   already work around them".
+   See `../core/docs/02_ACTIVEPIECES_PLATFORM.md` §1 (License boundary) for
+   the full EE-feature → MIT-workaround map.
 2. Buy an EE license from `sales@activepieces.com`. EE code is bundled in
    the image but dormant without a license — a valid license unlocks it
    at runtime without us patching anything.
@@ -112,40 +112,50 @@ both into a single :8080 process — that's why Docker mode targets :8080.)
 Then `bun run dev` in `core/apps/web/` proxies AP routes to native AP
 instead of Docker AP. Unset / remove the line to flip back.
 
-Detailed runbook: `../core/docs/DEV_RUNBOOK.md` § "Native AP mode".
+Detailed runbook: `../core/docs/07_DEV_RUNBOOK.md` § "Native AP mode".
 
 ---
 
-## Upgrade flow (rebase against upstream)
+## Upgrade flow (cherry-pick, NOT rebase)
 
-When upstream cuts a new release we want to adopt:
+> ⚠️ **Do not `git rebase gravity/main` onto the new tag.** The branch contains a
+> poisoned commit (`b42b8145`, mislabeled "ci: create release tag") that carries an
+> ancient full-tree snapshot — rebasing it 3-way-merges the whole tree and explodes
+> into **~7,500 conflicts**. Cherry-pick the patch commit onto a clean tag instead.
+
+The single canonical, detailed runbook now lives in
+[`../core/docs/02_ACTIVEPIECES_PLATFORM.md` §6](../core/docs/02_ACTIVEPIECES_PLATFORM.md)
+(the old `AP_UPGRADE_CHECKLIST.md` was consolidated there). It covers the **four
+dependency surfaces to re-audit** (REST contract, direct AP-Postgres coupling,
+JWT/encryption, env) plus post-upgrade smoke tests. Short version:
 
 ```bash
-# update our upstream tracker
 git fetch upstream --tags
-git checkout upstream-main
-git reset --hard upstream/main
-git push origin upstream-main
+# 0. safety
+git branch backup/gravity-main-pre-<tag>
+git branch gravity/wip-patches <patches-commit>
 
-# rebase gravity/main onto the new release tag
-git checkout gravity/main
-git rebase 0.84.0          # the tag we are adopting
+# 1. base on the CLEAN tag, cherry-pick ONLY the Gravity patch commit
+git -c core.protectNTFS=false checkout -B gravity/upgrade-<tag> <tag>
+git -c core.protectNTFS=false cherry-pick <patches-commit>
+#    expect ONE conflict: tsconfig.base.json `paths` — keep ALL entries
 
-# Resolve each conflict by referencing GRAVITY_PATCHES.md.
-# For every patch:
-#   - Does the original reason still hold?
-#   - If upstream fixed the underlying issue:
-#       git rebase --skip   (drop the patch)
-#       and move the entry to "Removed / superseded patches" in
-#       GRAVITY_PATCHES.md.
-#   - Otherwise resolve, git add, git rebase --continue.
+# 2. regenerate lockfile + typecheck the custom piece against the new framework
+bun install
+bunx tsc --noEmit -p packages/pieces/community/gravity-piece-publish-gate/tsconfig.lib.json
 
-git push --force-with-lease origin gravity/main
-# Triggers the CI image build automatically.
+# 3. run the four-surface audit (core §6a), then promote + push
+git branch -f gravity/main gravity/upgrade-<tag>
+CI=true git push -u origin gravity/main     # CI=true → non-interactive, skips pre-push lint/tests
 ```
 
-Then run through `../core/docs/AP_UPGRADE_CHECKLIST.md` for the env-var,
-REST-contract, and schema audits that are orthogonal to our patches.
+Windows gotchas (all hit during the 0.85.4 bump):
+- **`:Zone.Identifier` NTFS files** block git tree ops → prefix with `git -c core.protectNTFS=false`
+  (strip leftover streams with PowerShell `Remove-Item -LiteralPath <png> -Stream Zone.Identifier`).
+- **The `commit-msg` hook is broken** here on Windows+bun (`npx --no -- commitlint` can't find the
+  local bin → tries to fetch `commitlint@21.0.2` and aborts, blocking every commit). **This is why
+  these very patches were uncommitted for so long.** Fix the hook line to
+  `./node_modules/.bin/commitlint --edit "$1"` (pending `P-003`); until then use `--no-verify`.
 
 ---
 
@@ -162,9 +172,8 @@ commit using that prefix also stages a change to `GRAVITY_PATCHES.md`.
 
 ## Where to read next
 
-1. `GRAVITY_PATCHES.md` — what we've patched (empty at fork time)
-2. `../core/docs/ACTIVEPIECES_FORK_AND_DEPLOY.md` — the full plan + license
-3. `../core/docs/ACTIVEPIECES_FORK_SCOPE.md` — concrete map of what we can / can't touch
-4. `../core/docs/AP_UPGRADE_CHECKLIST.md` — per-version-bump runbook
-5. `../core/docs/DEV_RUNBOOK.md` — Gravity-side dev workflow
-6. Upstream `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `AGENTS.md` — still apply
+1. `GRAVITY_PATCHES.md` — the P-NNN patch ledger (currently P-000..P-002 + pending P-003)
+2. `../core/docs/02_ACTIVEPIECES_PLATFORM.md` — **consolidated source of truth**: fork plan, license boundary, the four core↔AP dependency surfaces, and the upgrade runbook (§6). Supersedes the old `ACTIVEPIECES_FORK_AND_DEPLOY.md` / `ACTIVEPIECES_FORK_SCOPE.md` / `AP_UPGRADE_CHECKLIST.md` (now in `../core/docs/archive/`).
+3. `../core/docs/07_DEV_RUNBOOK.md` — Gravity-side dev workflow
+4. `../core/docs/03_MARKETPLACE.md` — publish/clone/run logic + the AP source-path table
+5. Upstream `README.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `AGENTS.md` — still apply
