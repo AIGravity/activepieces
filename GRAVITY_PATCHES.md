@@ -11,8 +11,8 @@ here, it does not exist.
 
 ## Active patches
 
-> The fork was bootstrapped from upstream `v0.83.1` on 2026-05-25.
-> Next free number is `P-003`. See **Patch template** below for the entry format.
+> The fork was bootstrapped from upstream `v0.83.1` on 2026-05-25, and **adopted upstream `0.85.4` on 2026-06-19** (via cherry-pick onto the clean tag — a plain rebase explodes on commit `b42b8145`; full runbook in `../core/docs/02_ACTIVEPIECES_PLATFORM.md` §6).
+> Next free number is `P-005` (`P-003` pending — see **Pending patches**; `P-004` active below). See **Patch template** below for the entry format.
 
 ### P-000: Force LF line endings on shell scripts
 - **Files**: `.gitattributes`
@@ -38,6 +38,27 @@ here, it does not exist.
 - **Removable if upstream fixes**: yes
 - **Rebase risk**: low — small localized change in CLI tooling
 
+### P-004: OpenRouter per-request cost metering
+- **Files**: `packages/pieces/community/ai/src/lib/common/gravity-meter.ts` (new), `packages/pieces/community/ai/src/lib/common/ai-sdk.ts`
+- **Category**: mit-feature
+- **Reason**: Upstream AP discards the cost OpenRouter returns. This sends `usage: { include: true }` on the OpenRouter provider and wraps its `fetch` to read the real per-request `usage.cost` (+ token counts) from both JSON (`generateText`) and SSE (`streamText`/Agent) bodies, then fire-and-forget POSTs it to the Gravity ai-service `/credits/internal/workflow-llm-event` endpoint keyed by the AP `runId`. Covers every AI action routed through `createAIModel` (Ask AI, Run Agent, Summarize, Classify, Extract). No-op unless `GRAVITY_METERING_URL` is set, so upstream behaviour is unchanged. ⚠️ In SANDBOXED execution mode, `GRAVITY_METERING_URL` must also be added to `AP_SANDBOX_PROPAGATED_ENV_VARS`. Full design: `../core/docs/CREDIT_SYSTEM.md` → "How an Activepieces flow LLM call gets metered".
+- **Upstream status**: not appropriate for upstream (Gravity billing integration)
+- **Removable if upstream fixes**: no
+- **Rebase risk**: low — net-new file + one isolated provider case in `ai-sdk.ts`; conflicts only if upstream rewrites the OpenRouter case.
+- **Not yet covered**: the standalone `open-router` piece (`ask-open-router.ts`) bypasses `createAIModel` — separate follow-up.
+
+---
+
+## Pending patches (identified, not yet applied)
+
+### P-003: Fix commit-msg hook for Windows + bun
+- **Files**: `.husky/commit-msg`
+- **Category**: bug-fix
+- **Reason**: The hook's last line is `npx --no -- commitlint --edit ${1}`. On Windows + bun, npx cannot resolve the locally-installed `@commitlint/cli` (its bins are `commitlint.exe` / `commitlint.bunx`), so it tries to fetch the standalone `commitlint@21.0.2` package and aborts non-interactively — **blocking every commit**. This is why the fork's own patches sat uncommitted. Fix: replace that line with `./node_modules/.bin/commitlint --edit "$1"` (or `bunx commitlint --edit "$1"`). The `[gravity-patch P-NNN]` ledger check above it is fine and should stay.
+- **Upstream status**: n/a (Gravity-owned hook)
+- **Removable if upstream fixes**: no
+- **Rebase risk**: low — single line in a gravity-owned hook
+
 ---
 
 ## Removed / superseded patches
@@ -61,7 +82,7 @@ Every active patch is a section like this:
 - **Rebase risk**: low | medium | high — what to watch for during next rebase
 ```
 
-Categories enforced by policy (see also `core/docs/ACTIVEPIECES_FORK_AND_DEPLOY.md`):
+Categories enforced by policy (see also `../core/docs/02_ACTIVEPIECES_PLATFORM.md` §1):
 
 | Category | OK? | Notes |
 |---|---|---|
@@ -103,6 +124,5 @@ git log --grep='\[gravity-patch' --name-only --format='' | sort -u
 ## Useful cross-references
 
 - `README-GRAVITY.md` — orientation for new contributors to the fork
-- `../core/docs/ACTIVEPIECES_FORK_AND_DEPLOY.md` — the plan + license rules
-- `../core/docs/ACTIVEPIECES_FORK_SCOPE.md` — what we can / cannot touch in this repo
-- `../core/docs/AP_UPGRADE_CHECKLIST.md` — per-version-bump runbook
+- `../core/docs/02_ACTIVEPIECES_PLATFORM.md` — **the consolidated source of truth**: fork plan, license rules, what we can/can't touch, the four core↔AP dependency surfaces, and the per-version upgrade runbook (§6). (The old `ACTIVEPIECES_FORK_AND_DEPLOY.md` / `ACTIVEPIECES_FORK_SCOPE.md` / `AP_UPGRADE_CHECKLIST.md` were merged here; originals now in `../core/docs/archive/`.)
+- `../core/docs/07_DEV_RUNBOOK.md` — Gravity-side dev workflow

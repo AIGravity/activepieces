@@ -12,6 +12,7 @@ import { AIProviderName, AzureProviderConfig, BaseAIProviderAuthConfig, BedrockP
 import { createAiGateway } from 'ai-gateway-provider';
 import { createAnthropic as createAnthropicGateway } from 'ai-gateway-provider/providers/anthropic';
 import { createGoogleGenerativeAI as createGoogleGateway } from 'ai-gateway-provider/providers/google';
+import { makeMeteringFetch } from './gravity-meter'; // [gravity-patch P-004]
 async function fetchProviderConfig(params: { provider: AIProviderName, engineToken: string, apiUrl: string }) {
     const { body } = await httpClient.sendRequest<GetProviderConfigResponse>({
         method: HttpMethod.GET,
@@ -205,7 +206,14 @@ export async function createAIModel({
         case AIProviderName.ACTIVEPIECES:
         case AIProviderName.OPENROUTER: {
             const { apiKey } = auth as BaseAIProviderAuthConfig
-            const openRouterProvider = createOpenRouter({ apiKey })
+            // [gravity-patch P-004] `usage: { include: true }` makes OpenRouter
+            // return the real per-request cost; the metering fetch reads it and
+            // reports it keyed by runId. No-op unless GRAVITY_METERING_URL is set.
+            const openRouterProvider = createOpenRouter({
+                apiKey,
+                extraBody: { usage: { include: true } },
+                fetch: makeMeteringFetch({ provider, model: modelId, projectId, flowId, runId }),
+            })
             return openRouterProvider.chat(modelId) as LanguageModel
         }
         default:
