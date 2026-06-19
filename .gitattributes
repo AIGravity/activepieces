@@ -1,0 +1,11 @@
+# [gravity-patch P-000] Force LF line endings on shell scripts to avoid the
+# Windows-git autocrlf=true trap that breaks Linux shebangs inside the Docker
+# image (`exec ./docker-entrypoint.sh: no such file or directory`).
+* text=auto
+*.sh text eol=lf
+*.bash text eol=lf
+docker-entrypoint.sh text eol=lf
+# Windows-only batch files keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

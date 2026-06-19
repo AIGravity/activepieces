@@ -1,0 +1,42 @@
+# Gravity EE-license guard
+#
+# Blocks PRs that modify Activepieces EE-licensed directories
+# (packages/ee/ and packages/server/api/src/app/ee/). These paths are under
+# a commercial license and we (the Gravity fork) deliberately do not patch
+# them. See README-GRAVITY.md and core/docs/ACTIVEPIECES_FORK_AND_DEPLOY.md
+# for the policy + alternatives.
+#
+# Local mirror of this check lives in .husky/pre-commit.
+
+name: gravity / ee-guard
+
+on:
+  pull_request:
+    branches:
+      - 'gravity/**'
+
+jobs:
+  ee-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block patches touching EE directories
+        run: |
+          set -euo pipefail
+          BASE_SHA=$(git merge-base "origin/${GITHUB_BASE_REF}" HEAD)
+          CHANGED=$(git diff --name-only "${BASE_SHA}" HEAD)
+          EE_TOUCHED=$(echo "${CHANGED}" | grep -E '^(packages/ee/|packages/server/api/src/app/ee/)' || true)
+          if [ -n "${EE_TOUCHED}" ]; then
+            echo "::error::PR modifies EE-licensed files — not allowed under MIT-fork policy:"
+            echo "${EE_TOUCHED}"
+            echo ""
+            echo "If you need this functionality, either:"
+            echo "  1. Redesign to use only MIT-licensed surfaces, or"
+            echo "  2. Contact sales@activepieces.com for an EE license."
+            exit 1
+          fi
+          echo "OK — no EE files touched."

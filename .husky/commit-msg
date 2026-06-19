@@ -1,5 +1,16 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
+# [gravity-patch P-NNN] commits must also touch GRAVITY_PATCHES.md so the
+# patch registry stays in sync with the actual diff. See README-GRAVITY.md.
+MSG_FILE="$1"
+if grep -qE '\[gravity-patch P-[0-9]+\]' "$MSG_FILE"; then
+  STAGED=$(git diff --cached --name-only)
+  if ! echo "$STAGED" | grep -qE '^GRAVITY_PATCHES\.md$'; then
+    echo "Error: commit message uses [gravity-patch P-NNN] but GRAVITY_PATCHES.md is not in this commit."
+    echo "Update GRAVITY_PATCHES.md with the new patch entry and stage it before committing."
+    exit 1
+  fi
+fi
 
 npx --no -- commitlint --edit ${1}

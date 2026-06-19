@@ -32,7 +32,15 @@ function symlinkNodeModules({ piecePath, distPath }: PieceDistPaths): void {
     if (!existsSync(srcNodeModules) || existsSync(distNodeModules)) {
         return
     }
-    symlinkSync(resolve(srcNodeModules), distNodeModules, 'dir')
+    try {
+        symlinkSync(resolve(srcNodeModules), distNodeModules, 'dir')
+    }
+    catch {
+        // The dist/node_modules symlink is only a convenience for running the
+        // built piece locally; it is not part of the published package (npm
+        // ignores node_modules). On Windows, symlink creation requires admin or
+        // Developer Mode, so skip it there instead of failing the publish.
+    }
 }
 
 function preparePieceDistForPublish(piecePath: string): void {

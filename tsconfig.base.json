@@ -1029,6 +1029,9 @@
       "@activepieces/piece-pubrio": [
         "packages/pieces/community/pubrio/src/index.ts"
       ],
+      "gravity-piece-publish-gate": [
+        "packages/pieces/community/gravity-piece-publish-gate/src/index.ts"
+      ],
       "@activepieces/piece-pushover": [
         "packages/pieces/community/pushover/src/index.ts"
       ],

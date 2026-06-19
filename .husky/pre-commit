@@ -9,3 +9,19 @@ if [ -n "$ENV_FILES" ]; then
   echo "Please unstage them with: git reset HEAD <file>"
   exit 1
 fi
+
+# [gravity-patch] Block changes to EE-licensed directories.
+# Mirrors .github/workflows/ee-guard.yml. See README-GRAVITY.md.
+EE_TOUCHED=$(git diff --cached --name-only | grep -E '^(packages/ee/|packages/server/api/src/app/ee/)' || true)
+if [ -n "$EE_TOUCHED" ]; then
+  echo "Error: Staged changes touch EE-licensed files (commercial Activepieces license):"
+  echo "$EE_TOUCHED"
+  echo ""
+  echo "These paths are off-limits under our MIT-fork policy."
+  echo "If you need this functionality, either:"
+  echo "  1. Redesign to use only MIT-licensed surfaces, or"
+  echo "  2. Contact sales@activepieces.com for an EE license."
+  echo ""
+  echo "To unstage:  git reset HEAD <file>"
+  exit 1
+fi
