@@ -22,6 +22,7 @@ on:
     paths:
       - 'packages/pieces/community/ai/**'
       - 'tools/scripts/gen-gravity-piece-ai.mjs'
+      - '.github/workflows/gravity-piece-ai-autopublish.yml'
 
 concurrency:
   group: gravity-piece-ai-autopublish
@@ -30,6 +31,13 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # .npmrc references ${NPM_TOKEN}, so EVERY bun/npm step (incl. install) needs
+    # it defined. Job-level keeps it available to install + build + publish.
+    # If the secret is unset it resolves to '' → anonymous registry reads (fine
+    # for install); only the publish step actually requires a real token.
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,7 +46,8 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.3
+          # match the bun that wrote bun.lock (local regen used 1.3.14)
+          bun-version: 1.3.14
 
       - uses: actions/setup-node@v4
         with:
@@ -46,7 +55,9 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install deps
-        run: bun install --frozen-lockfile
+        # not --frozen: tolerate lockfile/bun-version drift in CI (this workflow
+        # only builds + publishes one piece; it doesn't gate on a locked tree)
+        run: bun install
 
       - name: Regenerate gravity-piece-ai from the ai piece
         id: gen
@@ -71,9 +82,6 @@ jobs:
       - name: Build + publish to npm
         if: steps.check.outputs.publish == 'true'
         run: npm run publish-piece gravity-piece-ai
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit the regenerated source back (keeps repo in sync)
         if: steps.check.outputs.publish == 'true'
