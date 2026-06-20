@@ -1,0 +1,89 @@
+# [gravity-patch P-005] Auto-publish gravity-piece-ai
+#
+# Keeps the published `gravity-piece-ai` npm package in sync with this fork's
+# `@activepieces/piece-ai` version. Regenerates the piece (copy of `ai` + the
+# P-004 metering) and publishes to public npm whenever the `ai` version is new.
+#
+# The published version tracks the `ai` package version 1:1 (see the generator).
+# So a publish happens when: you rebase the fork to a newer AP (the `ai` piece
+# version bumps), or you bump GRAVITY_REVISION in the generator. Already-published
+# versions are skipped (npm rejects duplicates anyway).
+#
+# Requires repo secret: NPM_TOKEN (publish rights to `gravity-piece-ai`).
+
+name: gravity-piece-ai auto-publish
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 6 * * 1' # weekly, Monday 06:00 UTC — catches version bumps
+  push:
+    branches: [gravity/main]
+    paths:
+      - 'packages/pieces/community/ai/**'
+      - 'tools/scripts/gen-gravity-piece-ai.mjs'
+
+concurrency:
+  group: gravity-piece-ai-autopublish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gravity/main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install deps
+        run: bun install --frozen-lockfile
+
+      - name: Regenerate gravity-piece-ai from the ai piece
+        id: gen
+        run: |
+          OUT=$(node tools/scripts/gen-gravity-piece-ai.mjs)
+          echo "$OUT"
+          VERSION=$(echo "$OUT" | grep '^PUBLISH_VERSION=' | cut -d= -f2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version is already on npm
+        id: check
+        run: |
+          V="${{ steps.gen.outputs.version }}"
+          if npm view "gravity-piece-ai@$V" version >/dev/null 2>&1; then
+            echo "gravity-piece-ai@$V already published — nothing to do."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "gravity-piece-ai@$V is new — will publish."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build + publish to npm
+        if: steps.check.outputs.publish == 'true'
+        run: npm run publish-piece gravity-piece-ai
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Commit the regenerated source back (keeps repo in sync)
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          git config user.name 'gravity-ci'
+          git config user.email 'ci@gravity.local'
+          git add packages/pieces/community/gravity-piece-ai
+          if git diff --cached --quiet; then
+            echo "no source changes to commit"
+          else
+            git commit -m "[skip ci] chore(gravity): regenerate gravity-piece-ai@${{ steps.gen.outputs.version }}"
+            git push origin gravity/main
+          fi

@@ -12,7 +12,7 @@ here, it does not exist.
 ## Active patches
 
 > The fork was bootstrapped from upstream `v0.83.1` on 2026-05-25, and **adopted upstream `0.85.4` on 2026-06-19** (via cherry-pick onto the clean tag — a plain rebase explodes on commit `b42b8145`; full runbook in `../core/docs/02_ACTIVEPIECES_PLATFORM.md` §6).
-> Next free number is `P-005` (`P-003` pending — see **Pending patches**; `P-004` active below). See **Patch template** below for the entry format.
+> Next free number is `P-006` (`P-003` pending — see **Pending patches**; `P-004`/`P-005` active below). See **Patch template** below for the entry format.
 
 ### P-000: Force LF line endings on shell scripts
 - **Files**: `.gitattributes`
@@ -46,6 +46,16 @@ here, it does not exist.
 - **Removable if upstream fixes**: no
 - **Rebase risk**: low — net-new file + one isolated provider case in `ai-sdk.ts`; conflicts only if upstream rewrites the OpenRouter case.
 - **Not yet covered**: the standalone `open-router` piece (`ask-open-router.ts`) bypasses `createAIModel` — separate follow-up.
+
+### P-005: gravity-piece-ai (published metering piece) + auto-publish pipeline
+- **Files**: `tools/scripts/gen-gravity-piece-ai.mjs` (new), `.github/workflows/gravity-piece-ai-autopublish.yml` (new), `packages/pieces/community/gravity-piece-ai/**` (generated), `tsconfig.base.json` (paths entry)
+- **Category**: mit-feature
+- **Reason**: A *deployed* AP runtime-fetches the OFFICIAL `@activepieces/piece-ai` from the registry (`cloud.activepieces.com/api/v1/pieces`), so the P-004 metering patched into this fork's `ai` source **never runs there**. P-005 publishes a renamed copy of the `ai` piece (carrying P-004) to **public npm as `gravity-piece-ai`**, which AP installs (Platform → Pieces) and flows reference. The generator regenerates it deterministically from the canonical `ai` piece (copy + rename; version tracks the `ai` version 1:1); the CI workflow auto-publishes on each `ai` version bump (and skips already-published versions). Verified: `turbo run build --filter=gravity-piece-ai` compiles clean and the metering is in `dist`.
+- **Consumer side (in core, NOT this repo)**: flows must reference `gravity-piece-ai` instead of `@activepieces/piece-ai` — add a piece-name rewrite to the clone-time `rewriteManagedAiProviders` step (`core/.../flow-tree.ts`), and install `gravity-piece-ai` in AP.
+- **Upstream status**: not appropriate for upstream (Gravity billing integration)
+- **Removable if upstream fixes**: no
+- **Rebase risk**: low — generated piece dir + generator are net-new; only shared touch-point is the `tsconfig.base.json` paths entry. The metering itself lives in P-004; the generator just copies it.
+- **Secret required**: `NPM_TOKEN` (publish rights to `gravity-piece-ai`).
 
 ---
 
