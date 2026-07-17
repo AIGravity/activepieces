@@ -1,6 +1,6 @@
 import { isNil, tryCatch } from '@activepieces/core-utils'
 import { apDayjs, safeHttp } from '@activepieces/server-utils'
-import { FileType, PackageType, PieceType } from '@activepieces/shared'
+import { EXACT_VERSION_REGEX, FileType, PackageType, PieceType } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { fileRepo } from '../file/file.service'
 import { s3Helper } from '../file/s3-helper'
@@ -29,6 +29,15 @@ export const pieceBundle = (log: FastifyBaseLogger) => ({
         }
         const metadata = await pieceMetadataService(log).get({ name, version, platformId, projectId })
         if (isNil(metadata)) {
+            // A REGISTRY piece being installed for the first time has no metadata row yet —
+            // EXTRACT_PIECE_METADATA runs before pieceMetadataService.create, and the engine fetches
+            // the bundle through this endpoint to run that extraction. Mirror the archiveId bypass
+            // above and fall back to the public npm tarball instead of failing, otherwise first-time
+            // npm installs can never succeed (the lookup requires the row the install is about to
+            // create). Only exact versions are forwarded so arbitrary strings never reach the URL.
+            if (EXACT_VERSION_REGEX.test(version)) {
+                return { type: 'redirect', url: npmTarballUrl({ name, version }) }
+            }
             return { type: 'not-found' }
         }
         if (metadata.packageType === PackageType.ARCHIVE && !isNil(metadata.archiveId)) {

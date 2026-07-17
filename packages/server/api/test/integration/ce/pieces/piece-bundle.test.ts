@@ -89,8 +89,33 @@ describe('Piece Bundle Endpoint', () => {
         expect(ownerResponse.statusCode).toBe(StatusCodes.OK)
         expect(ownerResponse.rawPayload.toString()).toBe('fake-tgz-bytes')
 
+        // Another platform never gets the private archive bytes. The name resolves like any
+        // unregistered registry package for that tenant: a redirect to public npm.
         const otherPlatformResponse = await app!.inject(bundleRequest('@acme/piece-private', '0.0.1', tokenB))
-        expect(otherPlatformResponse.statusCode).toBe(StatusCodes.NOT_FOUND)
+        expect(otherPlatformResponse.statusCode).toBe(StatusCodes.TEMPORARY_REDIRECT)
+        expect(otherPlatformResponse.headers.location).toContain('registry.npmjs.org')
+    })
+
+    it('falls back to the npm tarball for a registry piece with no metadata row yet (first install)', async () => {
+        const { mockPlatform, mockProject } = await mockAndSaveBasicSetup()
+        const token = await engineToken(mockProject.id, mockPlatform.id)
+
+        // No piece_metadata row exists — this is the EXTRACT_PIECE_METADATA fetch of a
+        // brand-new npm install, which must not 404 (the row is created after extraction).
+        const response = await app!.inject(bundleRequest('@acme/piece-brand-new', '9.9.9', token))
+
+        expect(response.statusCode).toBe(StatusCodes.TEMPORARY_REDIRECT)
+        expect(response.headers.location).toContain('registry.npmjs.org')
+        expect(response.headers.location).toContain('piece-brand-new-9.9.9.tgz')
+    })
+
+    it('does not build a tarball URL from a non-exact version when no metadata exists', async () => {
+        const { mockPlatform, mockProject } = await mockAndSaveBasicSetup()
+        const token = await engineToken(mockProject.id, mockPlatform.id)
+
+        const response = await app!.inject(bundleRequest('@acme/piece-brand-new', 'latest', token))
+
+        expect(response.statusCode).toBe(StatusCodes.NOT_FOUND)
     })
 
     it('streams an archive by archiveId for the owning platform and 404s for others', async () => {
