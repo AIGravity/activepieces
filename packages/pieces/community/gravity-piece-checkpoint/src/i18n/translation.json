@@ -1,0 +1,17 @@
+{
+  "Gravity Checkpoint": "Gravity Checkpoint",
+  "Checks the next step with the Gravity Runtime Checker before it runs: continues when it is safe, pauses to ask you when it is uncertain, and stops the run when it is clearly wrong.": "Checks the next step with the Gravity Runtime Checker before it runs: continues when it is safe, pauses to ask you when it is uncertain, and stops the run when it is clearly wrong.",
+  "Check Before Step": "Check Before Step",
+  "Asks the Gravity Runtime Checker whether the next step should run. Continues, pauses for a decision, or stops the run.": "Asks the Gravity Runtime Checker whether the next step should run. Continues, pauses for a decision, or stops the run.",
+  "Step to check": "Step to check",
+  "Step label": "Step label",
+  "Kind of step": "Kind of step",
+  "App": "App",
+  "Action": "Action",
+  "Inputs of the step to check": "Inputs of the step to check",
+  "Code": "Code",
+  "What the user asked for": "What the user asked for",
+  "Checker address": "Checker address",
+  "If the checker cannot answer": "If the checker cannot answer",
+  "Checker timeout (seconds)": "Checker timeout (seconds)"
+}

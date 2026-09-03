@@ -606,6 +606,12 @@
       "@activepieces/piece-gravityforms": [
         "packages/pieces/community/gravityforms/src/index.ts"
       ],
+      "gravity-piece-publish-gate": [
+        "packages/pieces/community/gravity-piece-publish-gate/src/index.ts"
+      ],
+      "gravity-piece-ai": [
+        "packages/pieces/community/gravity-piece-ai/src/index.ts"
+      ],
       "@activepieces/piece-greenhouse": [
         "packages/pieces/community/greenhouse/src/index.ts"
       ],
